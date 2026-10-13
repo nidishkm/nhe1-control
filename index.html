@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NHE1 Supervisor Control</title>
+<style>
+:root{--navy:#153b66;--cyan:#20a7b5;--bg:#eef5fa;--card:#fff;--bd:#d6e4ee;--txt:#14263d;--mut:#5d7085;--ok:#067d62;--bad:#cc0c39}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 "Amazon Ember",Inter,Segoe UI,Arial,sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 16px}
+h1{margin:0;font-size:1.45em;color:var(--navy);letter-spacing:.02em}
+h1 span{color:var(--cyan)}
+.dot{display:inline-flex;align-items:center;gap:6px;font-size:.8em;font-weight:700;color:var(--mut);white-space:nowrap}
+.dot i{width:10px;height:10px;border-radius:50%;background:#b8c4cf}
+.dot.ok i{background:var(--ok)} .dot.bad i{background:var(--bad)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 10px #0b6fa012}
+.card h2{margin:0 0 12px;font-size:.85em;letter-spacing:.1em;color:#175c94}
+label{display:block;font-size:.85em;font-weight:700;color:var(--mut);margin:10px 0 4px}
+input[type=text],input[type=password],textarea,select{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--bd);border-radius:10px;background:#fbfdff;color:var(--txt)}
+textarea{resize:vertical;min-height:80px}
+.row{display:flex;gap:8px;align-items:center}
+.row input{flex:1}
+button{font:inherit;font-weight:700;border:0;border-radius:10px;padding:12px 14px;cursor:pointer;background:var(--navy);color:#fff;min-height:48px}
+button:disabled{opacity:.55;cursor:wait}
+button.sec{background:#e3eef6;color:var(--navy)}
+button.danger{background:var(--bad)}
+button.cy{background:var(--cyan)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.chk{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--txt);margin-top:12px}
+.chk input{width:20px;height:20px}
+.cnt{float:right;font-weight:600}
+.note{font-size:.8em;color:var(--mut);margin:6px 0 0}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:92vw;padding:12px 18px;border-radius:10px;color:#fff;font-weight:700;box-shadow:0 6px 20px #0004;display:none;z-index:9}
+#log{font-size:.82em;color:var(--mut);margin:0;padding-left:18px}
+.tvrow{display:flex;align-items:center;gap:10px;font-size:1.1em}
+.tvdot{width:14px;height:14px;border-radius:50%;background:#b8c4cf;flex:none}
+.tvcard.on .tvdot{background:var(--ok);box-shadow:0 0 0 4px #067d6224}
+.tvcard.warn .tvdot{background:#d98b24;box-shadow:0 0 0 4px #d98b2424}
+.tvcard.off .tvdot{background:var(--bad);box-shadow:0 0 0 4px #cc0c3924}
+.tvsub{font-size:.85em;color:var(--mut);margin-top:6px}
+@media (max-width:420px){.grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>NHE1 <span>SUPERVISOR</span> CONTROL</h1>
+    <span class="dot" id="state"><i></i><span id="statet">not tested</span></span>
+  </header>
+
+  <section class="card tvcard" id="tvcard">
+    <h2>📺 LIVE HUB TV</h2>
+    <div class="tvrow"><span class="tvdot" id="tvdot"></span><b id="tvmain">Waiting for the TV…</b></div>
+    <div class="tvsub" id="tvsub">Enter the remote code below. The TV reports every 10 minutes.</div>
+  </section>
+
+  <section class="card">
+    <h2>🔑 REMOTE CODE</h2>
+    <div class="row">
+      <input type="password" id="code" autocomplete="off" placeholder="Same code as on the Live Hub TV">
+      <button class="sec" id="show" type="button">Show</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="remember"> Remember on this computer</label>
+    <div class="grid2"><button class="cy" id="test" type="button" style="grid-column:1 / 3">🔌 Test connection</button></div>
+  </section>
+
+  <section class="card">
+    <h2>☕ BREAK</h2>
+    <div class="grid">
+      <button data-c="break:10">Start 10 min</button>
+      <button data-c="break:30">Start 30 min</button>
+      <button data-c="break:45">Start 45 min</button>
+    </div>
+    <div class="grid2">
+      <button class="sec" data-c="break:+5">Extend +5 min</button>
+      <button class="danger" data-c="break:end">End break</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>📢 ANNOUNCEMENT · MITTEILUNG</h2>
+    <label>English <span class="cnt" id="cen">0 / 350</span></label>
+    <textarea id="en" maxlength="350" placeholder="Enter an approved team message"></textarea>
+    <label>Deutsch (optional) <span class="cnt" id="cde">0 / 350</span></label>
+    <textarea id="de" maxlength="350" placeholder="Deutsche Version der Mitteilung"></textarea>
+    <label>Show on TV for</label>
+    <select id="min"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="240">4 hours</option><option value="1440">24 hours</option></select>
+    <label class="chk"><input type="checkbox" id="voice"> Also speak it (English + German)</label>
+    <div class="grid2">
+      <button id="send" type="button">Send announcement</button>
+      <button class="danger" id="clear" type="button">Clear announcement</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>LAST ACTIONS</h2>
+    <ul id="log"><li>Nothing sent yet.</li></ul>
+    <p class="note">Messages are encrypted with the remote code before they leave this device; the relay (ntfy.sh) only sees unreadable text. It is not a corporate service, so keep messages non-confidential and keep the code private.</p>
+  </section>
+</div>
+<div id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const LS = 'nhe1_sv_code';
+  const store = {
+    get(){ try { return localStorage.getItem(LS) || ''; } catch (e) { return ''; } },
+    set(v){ try { v ? localStorage.setItem(LS, v) : localStorage.removeItem(LS); } catch (e) {} }
+  };
+
+  // ---------- code ----------
+  const codeEl = $('code');
+  const saved = store.get();
+  if (saved) { codeEl.value = saved; $('remember').checked = true; }
+  const code = () => codeEl.value.trim();
+  const validCode = () => /^[A-Za-z0-9_-]{8,40}$/.test(code());
+  const topic = () => 'https://ntfy.sh/nhe1-livehub-' + encodeURIComponent(code());
+  function persist(){ store.set($('remember').checked && validCode() ? code() : ''); }
+  codeEl.addEventListener('change', () => { keyCache = {}; setState('', 'not tested'); persist(); });
+  $('remember').addEventListener('change', persist);
+  $('show').onclick = () => { const p = codeEl.type === 'password'; codeEl.type = p ? 'text' : 'password'; $('show').textContent = p ? 'Hide' : 'Show'; };
+
+  // ---------- UI helpers ----------
+  let tt;
+  function toast(msg, ok = true){ const t = $('toast'); t.textContent = msg; t.style.background = ok ? 'var(--ok)' : 'var(--bad)'; t.style.display = 'block'; clearTimeout(tt); tt = setTimeout(() => t.style.display = 'none', 3800); }
+  function setState(cls, text){ $('state').className = 'dot ' + cls; $('statet').textContent = text; }
+  function addLog(text){
+    const ul = $('log'); if (ul.dataset.used !== '1') { ul.innerHTML = ''; ul.dataset.used = '1'; }
+    const li = document.createElement('li'); const d = new Date();
+    li.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + '  ' + text;
+    ul.prepend(li); while (ul.children.length > 6) ul.lastChild.remove();
+  }
+  function needCode(){ if (validCode()) return false; toast('Enter the remote code first (8–40 letters/numbers)', false); codeEl.focus(); return true; }
+
+  // ---------- encryption (identical to the Live Hub script) ----------
+  const b64e = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
+  const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  let keyCache = {};
+  async function key(){
+    const c = code(); if (keyCache.c === c && keyCache.k) return keyCache.k;
+    const enc = new TextEncoder();
+    const base = await crypto.subtle.importKey('raw', enc.encode(c), 'PBKDF2', false, ['deriveKey']);
+    const k = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt: enc.encode('nhe1-livehub-remote-v1'), iterations: 150000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    keyCache = { c, k }; return k;
+  }
+  async function seal(text){
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(), new TextEncoder().encode(text)));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return 'enc:' + b64e(out);
+  }
+  async function open(msg){
+    if (!String(msg).startsWith('enc:')) return null;
+    try { const raw = b64d(String(msg).slice(4));
+      return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, await key(), raw.slice(12)));
+    } catch (e) { return null; }
+  }
+
+  // ---------- send ----------
+  async function send(cmd, label){
+    if (needCode()) return false;
+    try {
+      const r = await fetch(topic(), { method: 'POST', body: await seal(cmd) });
+      if (!r.ok) throw new Error('status ' + r.status);
+      if (label) { toast('Sent to Live Hub ✓  (' + label + ')'); addLog(label); }
+      return true;
+    } catch (e) {
+      toast('Send failed – ntfy.sh not reachable from this device', false); setState('bad', 'send failed'); return false;
+    }
+  }
+  const LABEL = { 'break:10': 'Break 10 min', 'break:30': 'Break 30 min', 'break:45': 'Break 45 min', 'break:+5': 'Break +5 min', 'break:end': 'Break ended' };
+  document.querySelectorAll('[data-c]').forEach(b => b.onclick = async () => {
+    const c = b.dataset.c;
+    if (c === 'break:end' && !confirm('End the break now?')) return;
+    b.disabled = true; await send(c, LABEL[c]); b.disabled = false;
+  });
+
+  // ---------- announcement ----------
+  const cnt = (el, out) => el.addEventListener('input', () => $(out).textContent = el.value.length + ' / 350');
+  cnt($('en'), 'cen'); cnt($('de'), 'cde');
+  $('send').onclick = async () => {
+    const text = $('en').value.trim(), textDe = $('de').value.trim();
+    if (!text) { toast('Enter the English text first', false); $('en').focus(); return; }
+    if (needCode()) return;
+    if (!confirm('Send this message to the warehouse TV?')) return;
+    const payload = { text, textDe, minutes: Number($('min').value), voice: $('voice').checked };
+    $('send').disabled = true;
+    if (await send('mgmt:' + encodeURIComponent(JSON.stringify(payload)), 'Announcement sent')) { $('en').value = ''; $('de').value = ''; $('cen').textContent = $('cde').textContent = '0 / 350'; $('voice').checked = false; }
+    $('send').disabled = false;
+  };
+  $('clear').onclick = async () => { if (confirm('Clear the announcement on the TV?')) await send('mgmt:clear', 'Announcement cleared'); };
+
+  // ---------- TV status: the TV sends an encrypted heartbeat every 10 min (silent, no sound) ----------
+  const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  let lastHb = null, hbBusy = false;
+  function showTv() {
+    const card = $('tvcard'), main = $('tvmain'), sub = $('tvsub');
+    card.classList.remove('on', 'warn', 'off');
+    if (!validCode()) { main.textContent = 'Waiting for the TV…'; sub.textContent = 'Enter the remote code below. The TV reports every 10 minutes.'; return; }
+    if (!lastHb) { card.classList.add('off'); main.textContent = 'No signal from the TV in the last 30 min'; sub.textContent = 'Board closed, laptop asleep/locked, no internet, or a different code (needs Live Hub v5.3.7+).'; return; }
+    const ageMin = (Date.now() - lastHb.at) / 60000, h = lastHb.hb || {};
+    const online = ageMin <= 12;
+    const cptOk = typeof h.cpt === 'number' && h.cpt >= 0 && h.cpt <= 600;
+    card.classList.add(!online ? 'off' : cptOk ? 'on' : 'warn');
+    main.textContent = online ? 'TV online · last report ' + hhmm(lastHb.at) : 'TV not seen since ' + hhmm(lastHb.at);
+    sub.textContent = [
+      h.v ? 'Live Hub v' + h.v : '',
+      h.cpt === -1 ? 'CPT data: none yet' : cptOk ? 'CPT data OK' : 'CPT data paused (VPN / Midway?) ' + (h.cpt ? Math.round(h.cpt / 60) + ' min' : ''),
+      h.brk ? 'break running' : '', h.ann ? 'announcement on screen' : ''
+    ].filter(Boolean).join(' · ');
+  }
+  async function pollTv() {
+    if (hbBusy || !validCode()) { showTv(); return; }
+    hbBusy = true;
+    try {
+      const r = await fetch(topic() + '/json?poll=1&since=30m', { cache: 'no-store' });
+      for (const line of (await r.text()).split('\n')) {
+        let m; try { m = JSON.parse(line); } catch (e) { continue; }
+        if (!m || m.event !== 'message') continue;
+        const pt = await open(m.message);
+        if (!pt || !pt.startsWith('hb:')) continue;
+        const at = m.time * 1000;
+        if (!lastHb || at > lastHb.at) { let hb = {}; try { hb = JSON.parse(pt.slice(3)); } catch (e) { } lastHb = { at, hb }; }
+      }
+    } catch (e) { }
+    hbBusy = false; showTv();
+  }
+  setInterval(pollTv, 60000); setInterval(showTv, 30000);
+  codeEl.addEventListener('change', () => { lastHb = null; pollTv(); });
+  pollTv();
+
+  // ---------- connection test: ping → TV answers pong ----------
+  $('test').onclick = async () => {
+    if (needCode()) return;
+    const btn = $('test'), id = Math.random().toString(36).slice(2, 10), t0 = Math.floor(Date.now() / 1000) - 2;
+    btn.disabled = true; btn.textContent = 'Testing… (up to 30 s)'; setState('', 'testing…');
+    const done = ok => {
+      btn.disabled = false; btn.textContent = '🔌 Test connection';
+      setState(ok ? 'ok' : 'bad', ok ? 'TV connected' : 'no answer');
+      toast(ok ? 'TV connected ✓ – Live Hub answered' : 'No answer from the TV – is the Live Hub open and the code the same?', ok);
+      addLog(ok ? 'Connection test OK' : 'Connection test: no answer');
+    };
+    if (!(await send('ping:' + id))) { btn.disabled = false; btn.textContent = '🔌 Test connection'; return; }
+    for (let i = 0; i < 9; i++) {
+      await new Promise(r => setTimeout(r, i ? 3000 : 4000));
+      try {
+        const r = await fetch(topic() + '/json?poll=1&since=' + t0);
+        for (const line of (await r.text()).split('\n')) {
+          let m; try { m = JSON.parse(line); } catch (e) { continue; }
+          if (m && m.event === 'message' && (await open(m.message)) === 'pong:' + id) return done(true);
+        }
+      } catch (e) {}
+    }
+    done(false);
+  };
+})();
+</script>
+</body>
+</html>
