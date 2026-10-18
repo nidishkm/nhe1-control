@@ -97,10 +97,18 @@ button.cy{background:var(--cyan)}
 
   <section class="card">
     <h2>🎉 SHIFT END · BIRTHDAY</h2>
+    <label>Which shift · Welche Schicht</label>
+    <select id="shsel" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cfe0f2;border-radius:10px;font-size:16px;background:#fff">
+      <option value="night" selected>🌙 Night shift · Nachtschicht</option><option value="morning">☀️ Morning shift · Frühschicht</option><option value="hybrid">🔄 Hybrid shift · Hybridschicht</option><option value="pm">🌆 PM shift · Spätschicht</option>
+    </select>
+    <label>Shift end time · Schichtende</label>
+    <input id="setime" type="time" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cfe0f2;border-radius:10px;font-size:16px">
+    <label class="chk"><input type="checkbox" id="shwe"> 🎉 "Have a great weekend" message</label>
     <div class="grid2">
-      <button data-c="shift:end:day">🌙 Shift end – thank you</button>
-      <button data-c="shift:end:we">🎉 Shift end – great weekend</button>
+      <button id="seset" type="button">⏰ Plan shift end</button>
+      <button class="sec" id="senow" type="button">📢 Announce now</button>
     </div>
+    <div class="grid2"><button class="danger" id="seoff" type="button" style="grid-column:1 / 3">Cancel planned shift end</button></div>
     <label>Birthday – first name only</label>
     <input id="bdname" maxlength="40" placeholder="e.g. Anna" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cfe0f2;border-radius:10px;font-size:16px">
     <div class="grid2"><button id="bday" type="button" style="grid-column:1 / 3">🎂 Play birthday wish on TV</button></div>
@@ -180,19 +188,58 @@ button.cy{background:var(--cyan)}
     try {
       const r = await fetch(topic(), { method: 'POST', body: await seal(cmd) });
       if (!r.ok) throw new Error('status ' + r.status);
-      if (label) { toast('Sent to Live Hub ✓  (' + label + ')'); addLog(label); }
+      let id = ''; try { id = (await r.json()).id || ''; } catch (e) { }
+      if (label) { toast('Sent – waiting for the TV…  (' + label + ')'); addLog(label + ' – sent'); if (id) waitAck(id, label); }
       return true;
     } catch (e) {
       toast('Send failed – ntfy.sh not reachable from this device', false); setState('bad', 'send failed'); return false;
     }
   }
-  const LABEL = { 'break:10': 'Break 10 min', 'break:30': 'Break 30 min', 'break:45': 'Break 45 min', 'break:+5': 'Break +5 min', 'break:end': 'Break ended', 'shift:end:day': 'Shift end', 'shift:end:we': 'Shift end (weekend)' };
+  // ---------- confirmation: the TV (Live Hub v7.8.1+) answers every command with what it did ----------
+  async function waitAck(ref, label) {
+    const t0 = Math.floor(Date.now() / 1000) - 5;
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, i ? 3000 : 3500));
+      try {
+        const r = await fetch(topic() + '/json?poll=1&since=' + t0, { cache: 'no-store' });
+        for (const line of (await r.text()).split('\n')) {
+          let m; try { m = JSON.parse(line); } catch (e) { continue; }
+          if (!m || m.event !== 'message') continue;
+          const pt = await open(m.message);
+          if (!pt || !pt.startsWith('ack:')) continue;
+          let a = {}; try { a = JSON.parse(pt.slice(4)); } catch (e) { continue; }
+          if (a.ref !== ref) continue;
+          const warn = /^no break|not started/i.test(a.msg || '');
+          toast((warn ? 'ℹ TV: ' : '✓ TV: ') + a.msg, !warn); addLog('TV: ' + a.msg); setState('ok', 'TV connected');
+          return;
+        }
+      } catch (e) { }
+    }
+    toast('No confirmation from the TV (' + label + ') – is the board open with Live Hub v7.8.1+?', false); addLog(label + ' – no TV confirmation');
+  }
+  const LABEL = { 'break:10': 'Break 10 min', 'break:30': 'Break 30 min', 'break:45': 'Break 45 min', 'break:+5': 'Break +5 min', 'break:end': 'Break ended', };
   document.querySelectorAll('[data-c]').forEach(b => b.onclick = async () => {
     const c = b.dataset.c;
     if (c === 'break:end' && !confirm('End the break now?')) return;
-    if (c.startsWith('shift:') && !confirm('Announce shift end on the TV now?')) return;
     b.disabled = true; await send(c, LABEL[c]); b.disabled = false;
   });
+
+  // ---------- shift end: plan per shift (time + shift), or announce now ----------
+  const shName = () => $('shsel').options[$('shsel').selectedIndex].text.replace(/^\S+\s/, '');
+  $('seset').onclick = async () => {
+    const v = $('setime').value, sh = $('shsel').value, we = $('shwe').checked;
+    if (!/^\d{2}:\d{2}$/.test(v)) { toast('Choose the shift end time first', false); $('setime').focus(); return; }
+    $('seset').disabled = true; await send('shift:at:' + v + ':' + sh + (we ? ':we' : ''), 'Shift end ' + v + ' – ' + shName()); $('seset').disabled = false;
+  };
+  $('senow').onclick = async () => {
+    const sh = $('shsel').value, we = $('shwe').checked;
+    if (!confirm('Announce shift end on the TV now?')) return;
+    $('senow').disabled = true; await send('shift:end:' + (we ? 'we' : 'day') + ':' + sh, 'Shift end now – ' + shName()); $('senow').disabled = false;
+  };
+  $('seoff').onclick = async () => {
+    if (!confirm('Cancel the planned shift-end announcement?')) return;
+    $('seoff').disabled = true; await send('shift:cancel', 'Planned shift end cancelled'); $('seoff').disabled = false;
+  };
 
   // ---------- birthday ----------
   $('bday').onclick = async () => {
@@ -235,7 +282,7 @@ button.cy{background:var(--cyan)}
     sub.textContent = [
       h.v ? 'Live Hub v' + h.v : '',
       h.cpt === -1 ? 'CPT data: none yet' : cptOk ? 'CPT data OK' : 'CPT data paused (VPN / Midway?) ' + (h.cpt ? Math.round(h.cpt / 60) + ' min' : ''),
-      h.brk ? 'break running' : '', h.ann ? 'announcement on screen' : ''
+      h.brk ? 'break running' : '', h.ann ? 'announcement on screen' : '', h.se ? 'planned shift end ' + h.se : ''
     ].filter(Boolean).join(' · ');
   }
   async function pollTv() {
