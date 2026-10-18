@@ -78,6 +78,16 @@ button.cy{background:var(--cyan)}
       <button class="sec" data-c="break:+5">Extend +5 min</button>
       <button class="danger" data-c="break:end">End break</button>
     </div>
+    <label>Plan a break · Pause planen</label>
+    <div class="grid2">
+      <input id="bptime" type="time" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cfe0f2;border-radius:10px;font-size:16px">
+      <select id="bpmin" style="width:100%;box-sizing:border-box;padding:12px;border:1px solid #cfe0f2;border-radius:10px;font-size:16px;background:#fff"><option value="10">10 min</option><option value="15">15 min</option><option value="30" selected>30 min</option><option value="45">45 min</option></select>
+    </div>
+    <div class="grid2">
+      <button id="bpset" type="button">⏰ Plan break</button>
+      <button class="danger" id="bpoff" type="button">Cancel planned breaks</button>
+    </div>
+    <p style="font-size:13px;color:#6a7f96;margin:6px 0 0">The TV starts the break by itself at that time. You can plan several breaks.</p>
   </section>
 
   <section class="card">
@@ -241,6 +251,17 @@ button.cy{background:var(--cyan)}
     $('seoff').disabled = true; await send('shift:cancel', 'Planned shift end cancelled'); $('seoff').disabled = false;
   };
 
+  // ---------- planned break ----------
+  $('bpset').onclick = async () => {
+    const v = $('bptime').value, mn = $('bpmin').value;
+    if (!/^\d{2}:\d{2}$/.test(v)) { toast('Choose the break time first', false); $('bptime').focus(); return; }
+    $('bpset').disabled = true; await send('break:at:' + v + ':' + mn, 'Break planned ' + v + ' – ' + mn + ' min'); $('bpset').disabled = false;
+  };
+  $('bpoff').onclick = async () => {
+    if (!confirm('Cancel all planned breaks?')) return;
+    $('bpoff').disabled = true; await send('break:plancancel', 'Planned breaks cancelled'); $('bpoff').disabled = false;
+  };
+
   // ---------- birthday ----------
   $('bday').onclick = async () => {
     const n = $('bdname').value.replace(/[<>&"]/g, '').trim().slice(0, 40);
@@ -282,7 +303,7 @@ button.cy{background:var(--cyan)}
     sub.textContent = [
       h.v ? 'Live Hub v' + h.v : '',
       h.cpt === -1 ? 'CPT data: none yet' : cptOk ? 'CPT data OK' : 'CPT data paused (VPN / Midway?) ' + (h.cpt ? Math.round(h.cpt / 60) + ' min' : ''),
-      h.brk ? 'break running' : '', h.ann ? 'announcement on screen' : '', h.se ? 'planned shift end ' + h.se : ''
+      h.brk ? 'break running' : '', h.ann ? 'announcement on screen' : '', h.se ? 'planned shift end ' + h.se : '', h.bp ? 'next planned break ' + h.bp : ''
     ].filter(Boolean).join(' · ');
   }
   async function pollTv() {
