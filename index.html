@@ -148,8 +148,15 @@ button.cy{background:var(--cyan)}
   const saved = store.get();
   if (saved) { codeEl.value = saved; $('remember').checked = true; }
   const code = () => codeEl.value.trim();
-  const validCode = () => /^[A-Za-z0-9_-]{8,40}$/.test(code());
-  const topic = () => 'https://ntfy.sh/nhe1-livehub-' + encodeURIComponent(code());
+  const validCode = () => /^[\x21-\x7E]{8,40}$/.test(code());   // v2: 8–40 characters, no spaces (@ # ! etc. allowed)
+  // v2 (Live Hub v7.31+): the relay channel is a one-way hash of the code, so the code itself never appears in a URL
+  let topicCache = {};
+  async function topicUrl(){
+    const c = code(); if (topicCache.c === c) return topicCache.u;
+    const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('nhe1-livehub-topic-v2:' + c)));
+    const u = 'https://ntfy.sh/nhe1-livehub-' + [...h].map(x => x.toString(16).padStart(2, '0')).join('').slice(0, 32);
+    topicCache = { c, u }; return u;
+  }
   function persist(){ store.set($('remember').checked && validCode() ? code() : ''); }
   codeEl.addEventListener('change', () => { keyCache = {}; setState('', 'not tested'); persist(); });
   $('remember').addEventListener('change', persist);
@@ -165,7 +172,7 @@ button.cy{background:var(--cyan)}
     li.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + '  ' + text;
     ul.prepend(li); while (ul.children.length > 6) ul.lastChild.remove();
   }
-  function needCode(){ if (validCode()) return false; toast('Enter the remote code first (8–40 letters/numbers)', false); codeEl.focus(); return true; }
+  function needCode(){ if (validCode()) return false; toast('Enter the remote code first (8–40 characters, no spaces)', false); codeEl.focus(); return true; }
 
   // ---------- encryption (identical to the Live Hub script) ----------
   const b64e = u8 => { let s = ''; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
@@ -196,7 +203,7 @@ button.cy{background:var(--cyan)}
   async function send(cmd, label){
     if (needCode()) return false;
     try {
-      const r = await fetch(topic(), { method: 'POST', body: await seal(cmd) });
+      const r = await fetch((await topicUrl()), { method: 'POST', body: await seal(cmd) });
       if (!r.ok) throw new Error('status ' + r.status);
       let id = ''; try { id = (await r.json()).id || ''; } catch (e) { }
       if (label) { toast('Sent – waiting for the TV…  (' + label + ')'); addLog(label + ' – sent'); if (id) waitAck(id, label); }
@@ -211,7 +218,7 @@ button.cy{background:var(--cyan)}
     for (let i = 0; i < 10; i++) {
       await new Promise(r => setTimeout(r, i ? 3000 : 3500));
       try {
-        const r = await fetch(topic() + '/json?poll=1&since=' + t0, { cache: 'no-store' });
+        const r = await fetch((await topicUrl()) + '/json?poll=1&since=' + t0, { cache: 'no-store' });
         for (const line of (await r.text()).split('\n')) {
           let m; try { m = JSON.parse(line); } catch (e) { continue; }
           if (!m || m.event !== 'message') continue;
@@ -310,7 +317,7 @@ button.cy{background:var(--cyan)}
     if (hbBusy || !validCode()) { showTv(); return; }
     hbBusy = true;
     try {
-      const r = await fetch(topic() + '/json?poll=1&since=30m', { cache: 'no-store' });
+      const r = await fetch((await topicUrl()) + '/json?poll=1&since=30m', { cache: 'no-store' });
       for (const line of (await r.text()).split('\n')) {
         let m; try { m = JSON.parse(line); } catch (e) { continue; }
         if (!m || m.event !== 'message') continue;
@@ -341,7 +348,7 @@ button.cy{background:var(--cyan)}
     for (let i = 0; i < 9; i++) {
       await new Promise(r => setTimeout(r, i ? 3000 : 4000));
       try {
-        const r = await fetch(topic() + '/json?poll=1&since=' + t0);
+        const r = await fetch((await topicUrl()) + '/json?poll=1&since=' + t0);
         for (const line of (await r.text()).split('\n')) {
           let m; try { m = JSON.parse(line); } catch (e) { continue; }
           if (m && m.event === 'message' && (await open(m.message)) === 'pong:' + id) return done(true);
